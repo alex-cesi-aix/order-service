@@ -1,0 +1,10 @@
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: order-service
+spec:
+  host: order-service
+#subsets:
+trafficPolicy:
+  tls:
+    mode: ISTIO_MUTUAL
