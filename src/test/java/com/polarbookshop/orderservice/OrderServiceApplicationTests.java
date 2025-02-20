@@ -1,7 +1,9 @@
 package com.polarbookshop.orderservice;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.polarbookshop.orderservice.book.Book;
 import com.polarbookshop.orderservice.book.BookClient;
+import com.polarbookshop.orderservice.event.OrderAcceptedMessage;
 import com.polarbookshop.orderservice.order.domain.Order;
 import com.polarbookshop.orderservice.order.domain.OrderStatus;
 import com.polarbookshop.orderservice.order.web.OrderRequest;
@@ -10,6 +12,8 @@ import org.mockito.BDDMockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.cloud.stream.binder.test.EnableTestBinder;
+import org.springframework.cloud.stream.binder.test.OutputDestination;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -18,11 +22,14 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
+@EnableTestBinder
 class OrderServiceApplicationTests {
 
 	@Container
@@ -30,6 +37,12 @@ class OrderServiceApplicationTests {
 
 	@Autowired
 	private WebTestClient webClient;
+
+	@Autowired
+	private OutputDestination outputDestination; // abstraction de la destination de sortie dans lequel les events Accepted Order sont publiés
+
+	@Autowired
+	private ObjectMapper objectMapper;
 
 	@MockBean
 	BookClient bookClient;
@@ -62,7 +75,7 @@ class OrderServiceApplicationTests {
 	}
 
 	@Test
-	void whenGetOrdersThenReturn() {
+	void whenGetOrdersThenReturn() throws IOException {
 		String bookIsbn = "1234567893";
 		Book returnedBook = new Book(bookIsbn, "Title", "Author", 9.90);
 		//définition du comportement du mock
@@ -78,6 +91,10 @@ class OrderServiceApplicationTests {
 		//vérification que le corps de la réponse contient bien une commande
 		assertThat(expectedOrder).isNotNull();
 
+		//récupération et vérification du message publié
+		assertThat(objectMapper.readValue(outputDestination.receive().getPayload(), OrderAcceptedMessage.class))
+				.isEqualTo(new OrderAcceptedMessage(expectedOrder.id()));
+
 		//vérifie qu'au moins une commande pour le livre d'ISBN donné est retournée
 		webClient.get()
 				.uri("/orders")
@@ -92,7 +109,7 @@ class OrderServiceApplicationTests {
 	}
 
 	@Test
-	void whenPostRequestAndBookExistsThenOrderAccepted(){
+	void whenPostRequestAndBookExistsThenOrderAccepted() throws IOException {
 		String bookIsbn = "1234567899";
 		Book returnedBook = new Book(bookIsbn, "Title", "Author", 9.90);
 		//définition du comportement du mock
@@ -105,6 +122,7 @@ class OrderServiceApplicationTests {
 				.uri("/orders")
 				.bodyValue(orderRequest)
 				.exchange()
+				.expectStatus().is2xxSuccessful()
 				.expectBody(Order.class).returnResult().getResponseBody();
 		//vérification de la commande créée
 		assertThat(createdOrder).isNotNull();
@@ -113,6 +131,13 @@ class OrderServiceApplicationTests {
 		assertThat(createdOrder.bookName()).isEqualTo(returnedBook.title()+" - "+returnedBook.author());
 		assertThat(createdOrder.bookPrice()).isEqualTo(returnedBook.price());
 		assertThat(createdOrder.status()).isEqualTo(OrderStatus.ACCEPTED);
+
+
+		//vérification que le message envoyé est bien celui correspondant à l'order créé par requête post
+		assertThat(objectMapper.readValue(outputDestination.receive().getPayload(), OrderAcceptedMessage.class))
+				.isEqualTo(new OrderAcceptedMessage(createdOrder.id()));
+		System.out.println("contenu message" +objectMapper.writeValueAsString(createdOrder));
+		System.out.println("order id "+ createdOrder.id());
 	}
 
 	@Test
@@ -127,6 +152,7 @@ class OrderServiceApplicationTests {
 				.uri("/orders")
 				.bodyValue(orderRequest)
 				.exchange()
+				.expectStatus().is2xxSuccessful()
 				.expectBody(Order.class).returnResult().getResponseBody();
 		//vérification de la commande créée
 		assertThat(createdOrder).isNotNull();

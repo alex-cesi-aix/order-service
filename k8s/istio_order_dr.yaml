@@ -4,7 +4,7 @@ metadata:
   name: order-service
 spec:
   host: order-service
-#subsets:
-trafficPolicy:
-  tls:
-    mode: ISTIO_MUTUAL
+  #subsets:
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL

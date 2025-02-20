@@ -35,10 +35,9 @@ spec:
               value: "jdbc:postgresql://polar-postgres/polardb_order"
             - name: POLAR_CATALOG_SERVICE_URI
               value: "http://catalog-service"
-            - name: SPRING_CLOUD_CONFIG_URI
-              value: "http://config-service"
-           # - name: SPRING_CLOUD_CONFIG_FAIL_FAST
-           #   value: "true"
+            - name: SPRING_RABBITMQ_HOST
+              value: polar-rabbitmq
+
           lifecycle:
             preStop:
               exec:
